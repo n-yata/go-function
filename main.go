@@ -1,52 +1,94 @@
 package main
 
 import (
-	"fmt"
-	"io"
+	"context"
+	"encoding/json"
+	"log"
 	"net/http"
-	"strings"
+	"os"
 
+	"example.com/m/domain/model"
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/go-playground/validator"
+	"github.com/joho/godotenv"
 )
 
-type FuncRequest struct {
-	URL     string            `json:"url,omitempty"`
-	Method  string            `json:"method,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    string            `json:"body,omitempty"`
+var validate *validator.Validate
+
+// コールドスタート時のみ実行
+func init() {
+	log.Println("Init function executed (cold start).")
+	validate = validator.New()
 }
 
-type FuncResponse struct {
-	Status string `json:"status"`
-	Body   string `json:"text"`
-}
+func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	log.Println("Handler function executed.")
 
-func HandleLambdaEvent(event *FuncRequest) (*FuncResponse, error) {
-	if event == nil {
-		return nil, fmt.Errorf("received nil event")
+	// LambdaのリクエストIDを取得
+	lc, ok := lambdacontext.FromContext(ctx)
+	if !ok {
+		log.Println("Failed to retrieve Lambda context")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error": "Unable to retrieve Lambda context"}`,
+		}, nil
 	}
 
-	var reqBody io.Reader
-	if event.Body != "" {
-		reqBody = strings.NewReader(event.Body)
-	}
+	requestID := lc.AwsRequestID
+	log.Printf("Lambda Request ID: %s", requestID)
 
-	req, _ := http.NewRequest(event.Method, event.URL, reqBody)
-	for key, value := range event.Headers {
-		req.Header.Set(key, value)
-	}
-
-	client := new(http.Client)
-	res, err := client.Do(req)
+	// 環境ファイルの読み込み
+	err := godotenv.Load()
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error": "fatal loading env file"}`,
+		}, nil
 	}
-	defer res.Body.Close()
+	host := os.Getenv("USER")
+	pass := os.Getenv("PASSWORD")
+	dbName := os.Getenv("DATABASE")
+	log.Printf("host: %s, pass: %s, dbName: %s", host, pass, dbName)
 
-	byteArray, _ := io.ReadAll(res.Body)
-	return &FuncResponse{Status: res.Status, Body: string(byteArray)}, nil
+	// リクエストボディのパース
+	var requestBody model.RequestBody
+	if err := json.Unmarshal([]byte(req.Body), &requestBody); err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       `{"error": "Invalid request body"}`,
+		}, nil
+	}
+
+	// バリデーション
+	if err := validate.Struct(requestBody); err != nil {
+		log.Printf("Validation failed: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       `{"error": "Validation error: ` + err.Error() + `"}`,
+		}, nil
+	}
+
+	// レスポンスの作成
+	responseBody := model.ResponseBody{
+		Message: "Validation passed",
+		Name:    requestBody.Name,
+		Age:     requestBody.Age,
+	}
+
+	response := events.APIGatewayV2HTTPResponse{
+		StatusCode: http.StatusOK,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+			"unique-key":   "unique-value",
+		},
+		Body: responseBody.ToJSON(),
+	}
+
+	return response, nil
 }
 
 func main() {
-	lambda.Start(HandleLambdaEvent)
+	lambda.Start(Handler)
 }
