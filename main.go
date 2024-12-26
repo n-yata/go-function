@@ -66,7 +66,7 @@ func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		log.Printf("Validation failed: %v", err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       `{"error": "Validation error: ` + err.Error() + `"}`,
+			Body:       `{"error": "Validation error"}`,
 		}, nil
 	}
 
