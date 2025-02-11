@@ -6,13 +6,16 @@
 
 [Lambda で Go をデプロイするまで　備忘録 (windows)](https://zenn.dev/ru/scraps/666673ea46bde1)
 
-### コマンド
+### コマンド（Powershell）
+go install github.com/aws/aws-lambda-go/cmd/build-lambda-zip@latest  
 
 $env:GOOS = "linux"  
 go env GOOS CGO_ENABLED GOARCH  
-go get github.com/aws/aws-lambda-go/lambda  
 set GOOS=linux  
 set GOARCH=amd64  
 set CGO_ENABLED=0  
-go build -tags lambda.norpc -o bootstrap main.go  
-C:\Users\{username}\go\bin\build-lambda-zip.exe -o myFunction.zip bootstrap
+go build -tags "lambda.norpc,dev" -o bootstrap .  
+build-lambda-zip -o myFunction.zip bootstrap  
+
+### binファイルの場所
+C:\Users\{username}\go\bin\  
