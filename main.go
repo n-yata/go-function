@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 
 	"example.com/m/config"
 	"example.com/m/domain/model"
@@ -19,21 +18,8 @@ import (
 
 var validate *validator.Validate
 
-func listFiles() {
-	files, err := os.ReadDir("/var/task")
-	if err != nil {
-		log.Printf("Error reading directory: %v", err)
-		return
-	}
-
-	for _, file := range files {
-		log.Printf("File in Lambda: %s", file.Name())
-	}
-}
-
 // コールドスタート時のみ実行
 func init() {
-	listFiles()
 	log.Println("Init function executed (cold start).")
 	validate = validator.New()
 }
