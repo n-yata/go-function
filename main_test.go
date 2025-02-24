@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"testing"
 
+	"example.com/m/domain/model"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/stretchr/testify/assert"
@@ -35,10 +37,15 @@ func TestHandler_ValidRequest(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, response.StatusCode)
 
-	var responseBody map[string]interface{}
+	var responseBody model.ResponseBody
 	err = json.Unmarshal([]byte(response.Body), &responseBody)
+	log.Println(responseBody)
 	assert.NoError(t, err)
-	assert.Contains(t, responseBody, "results")
+
+	// "results" ではなく、直接フィールドを確認する
+	assert.NotEmpty(t, responseBody.Address1)
+	assert.NotEmpty(t, responseBody.Address2)
+	assert.NotEmpty(t, responseBody.Address3)
 }
 
 func TestHandler_InvalidRequestBody(t *testing.T) {

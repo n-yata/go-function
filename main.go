@@ -24,12 +24,42 @@ func init() {
 	validate = validator.New()
 }
 
-func fetchPostalCodeInfo(postalCode string) (map[string]interface{}, error) {
+// APIリクエスト(POST)用のデータ構造体
+type PostalCodeRequest struct {
+	PostalCode string `json:"postalCode"`
+}
+
+func fetchPostalCodeInfo(postalCode string) (*model.ResponseBody, error) {
 	// 接続先のURLを環境変数から取得
 	baseUrl := config.ZIPCLOUD_API_URL
-
 	url := fmt.Sprintf("%s?zipcode=%s", baseUrl, postalCode)
-	resp, err := http.Get(url)
+
+	// // リクエストボディをJSONに変換(POSTリクエスト)
+	// requestBody := PostalCodeRequest{PostalCode: postalCode}
+	// jsonBody, err := json.Marshal(requestBody)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to marshal request body: %w", err)
+	// }
+
+	// // HTTPリクエストの作成（POSTリクエスト）
+	// req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonBody))
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to create request: %w", err)
+	// }
+
+	// HTTPリクエストの作成
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// リクエストヘッダーの追加
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "GoLambdaFunction/1.0")
+
+	// HTTPクライアントの作成
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch postal code info: %w", err)
 	}
@@ -39,17 +69,36 @@ func fetchPostalCodeInfo(postalCode string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
 	}
 
+	// レスポンスボディを読み込む
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read API response: %w", err)
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
+	// APIのレスポンスをパース
+	var apiResponse map[string]interface{}
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	return result, nil
+	// レスポンスデータをマッピング
+	results, ok := apiResponse["results"].([]interface{})
+	if !ok || len(results) == 0 {
+		return nil, fmt.Errorf("no address found for postal code: %s", postalCode)
+	}
+
+	firstResult, ok := results[0].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid API response format")
+	}
+
+	response := &model.ResponseBody{
+		Address1: firstResult["address1"].(string),
+		Address2: firstResult["address2"].(string),
+		Address3: firstResult["address3"].(string),
+	}
+
+	return response, nil
 }
 
 func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
