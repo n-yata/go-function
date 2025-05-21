@@ -24,7 +24,7 @@ func (m *MockHTTPClient) Get(url string) (*http.Response, error) {
 }
 
 func TestHandler_ValidRequest(t *testing.T) {
-	mockRequest := events.APIGatewayV2HTTPRequest{
+	mockRequest := events.APIGatewayProxyRequest{
 		Body:    `{"postalCode": "1000001"}`,
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
@@ -49,7 +49,7 @@ func TestHandler_ValidRequest(t *testing.T) {
 }
 
 func TestHandler_InvalidRequestBody(t *testing.T) {
-	mockRequest := events.APIGatewayV2HTTPRequest{
+	mockRequest := events.APIGatewayProxyRequest{
 		Body:    "invalid-json",
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
@@ -69,7 +69,7 @@ func TestHandler_InvalidRequestBody(t *testing.T) {
 }
 
 func TestHandler_ValidationError(t *testing.T) {
-	mockRequest := events.APIGatewayV2HTTPRequest{
+	mockRequest := events.APIGatewayProxyRequest{
 		Body:    `{"postalCode": ""}`,
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
@@ -89,7 +89,7 @@ func TestHandler_ValidationError(t *testing.T) {
 }
 
 func TestHandler_APIFailure(t *testing.T) {
-	mockRequest := events.APIGatewayV2HTTPRequest{
+	mockRequest := events.APIGatewayProxyRequest{
 		Body:    `{"postalCode": "9999999"}`,
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}

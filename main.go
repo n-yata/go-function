@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"example.com/m/config"
 	"example.com/m/domain/model"
@@ -53,18 +54,12 @@ func fetchPostalCodeInfo(postalCode string) (*model.ResponseBody, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// リクエストヘッダーの追加
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "GoLambdaFunction/1.0")
-
-	// HTTPクライアントの作成
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := callApi(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch postal code info: %w", err)
+		return nil, fmt.Errorf("failed callApi: %w", err)
 	}
-	defer resp.Body.Close()
 
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
 	}
@@ -101,14 +96,50 @@ func fetchPostalCodeInfo(postalCode string) (*model.ResponseBody, error) {
 	return response, nil
 }
 
-func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+func callApi(req *http.Request) (*http.Response, error) {
+	const (
+		maxRetries     = 5
+		initialBackoff = 200 * time.Millisecond
+	)
+
+	var resp *http.Response
+	var err error
+	backoff := initialBackoff
+	client := &http.Client{}
+
+	// リクエストヘッダーの追加
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "GoLambdaFunction/1.0")
+
+	for i := 0; i <= maxRetries; i++ {
+		resp, err = client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			return resp, nil
+		}
+
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		if i == maxRetries {
+			break
+		}
+
+		time.Sleep(backoff)
+		backoff *= 2
+	}
+
+	return nil, fmt.Errorf("failed to fetch postal code info: %w", err)
+}
+
+func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Println("Handler function executed.")
 
 	// LambdaのリクエストIDを取得
 	lc, ok := lambdacontext.FromContext(ctx)
 	if !ok {
 		log.Println("Failed to retrieve Lambda context")
-		return events.APIGatewayV2HTTPResponse{
+		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       `{"error": "Unable to retrieve Lambda context"}`,
 		}, nil
@@ -120,7 +151,7 @@ func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	// リクエストボディのパース
 	var requestBody model.RequestBody
 	if err := json.Unmarshal([]byte(req.Body), &requestBody); err != nil {
-		return events.APIGatewayV2HTTPResponse{
+		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       `{"error": "Invalid request body"}`,
 		}, nil
@@ -129,7 +160,7 @@ func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	// バリデーション
 	if err := validate.Struct(requestBody); err != nil {
 		log.Printf("Validation failed: %v", err)
-		return events.APIGatewayV2HTTPResponse{
+		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       `{"error": "Validation error"}`,
 		}, nil
@@ -139,7 +170,7 @@ func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	postalInfo, err := fetchPostalCodeInfo(requestBody.PostalCode)
 	if err != nil {
 		log.Printf("Error fetching postal info: %v", err)
-		return events.APIGatewayV2HTTPResponse{
+		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       fmt.Sprintf(`{"error": "%s"}`, err.Error()),
 		}, nil
@@ -147,7 +178,7 @@ func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 
 	// レスポンス作成
 	responseBody, _ := json.Marshal(postalInfo)
-	return events.APIGatewayV2HTTPResponse{
+	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
 		Headers: map[string]string{
 			"Content-Type": "application/json",

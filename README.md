@@ -19,3 +19,8 @@ build-lambda-zip -o myFunction.zip bootstrap
 
 ### binファイルの場所
 C:\Users\{username}\go\bin\  
+
+### Secrets Managerのライブラリ
+go get github.com/aws/aws-sdk-go-v2
+go get github.com/aws/aws-sdk-go-v2/config
+go get github.com/aws/aws-sdk-go-v2/service/secretsmanager
